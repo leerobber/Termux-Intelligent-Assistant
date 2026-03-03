@@ -29,6 +29,9 @@ _DEFAULTS: dict[str, Any] = {
     "log_level": "WARNING",
 }
 
+#: Public read-only view of the default settings.
+DEFAULTS: dict[str, Any] = _DEFAULTS
+
 
 def load() -> dict[str, Any]:
     """Load settings, merging with defaults."""

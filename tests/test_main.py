@@ -68,13 +68,13 @@ def test_coerce_int_invalid_raises():
 
 
 def test_coerce_bool_true_variants():
-    for raw in ("true", "True", "TRUE", "1", "yes", "Yes"):
+    for raw in ("true", "True", "TRUE", "1", "yes", "Yes", " true ", "true "):
         result = _coerce_value("stream", raw)
         assert result is True, f"Expected True for {raw!r}"
 
 
 def test_coerce_bool_false_variants():
-    for raw in ("false", "False", "FALSE", "0", "no", "No"):
+    for raw in ("false", "False", "FALSE", "0", "no", "No", " false ", "false "):
         result = _coerce_value("stream", raw)
         assert result is False, f"Expected False for {raw!r}"
 

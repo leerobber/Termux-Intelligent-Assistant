@@ -19,21 +19,22 @@ def _extract_bash_blocks(text: str) -> list[str]:
 
 
 def _coerce_value(key: str, raw: str):
-    """Coerce *raw* string to the type expected for *key* based on _DEFAULTS.
+    """Coerce *raw* string to the type expected for *key* based on DEFAULTS.
 
     Priority: bool → int → float → str (matching the default's type).
     For unknown keys or complex default types, falls back to json.loads.
     Raises ValueError with a user-friendly message on type mismatches.
     """
-    from assistant.core.config import _DEFAULTS
+    from assistant.core.config import DEFAULTS
 
-    if key in _DEFAULTS:
-        default = _DEFAULTS[key]
+    if key in DEFAULTS:
+        default = DEFAULTS[key]
         # bool must be checked before int (bool is a subclass of int)
         if isinstance(default, bool):
-            if raw.lower() in ("true", "1", "yes"):
+            raw_norm = raw.strip().lower()
+            if raw_norm in ("true", "1", "yes"):
                 return True
-            if raw.lower() in ("false", "0", "no"):
+            if raw_norm in ("false", "0", "no"):
                 return False
             raise ValueError(
                 f"'{key}' expects a boolean (true/false/yes/no/1/0), got: {raw!r}"
