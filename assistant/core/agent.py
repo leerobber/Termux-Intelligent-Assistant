@@ -8,7 +8,9 @@ Supports five backends:
   - mistral   : Mistral AI API (requires internet + API key)
   - llama     : Llama models via Groq API (requires internet + API key)
 
-All backends use streaming or chunked responses to minimise peak RAM usage.
+Where supported, backends use streaming or chunked responses to minimise peak
+RAM usage (Ollama does this by default; Anthropic honours the ``stream`` config
+flag).
 """
 from __future__ import annotations
 
@@ -172,13 +174,32 @@ class Agent:
             # Anthropic takes the system prompt separately from the conversation
             system_content = _SYSTEM_PROMPT
             user_messages = [m for m in messages if m["role"] != "system"]
-            response = client.messages.create(
-                model=self._cfg["anthropic_model"],
-                max_tokens=4096,
-                system=system_content,
-                messages=user_messages,
-            )
-            return response.content[0].text if response.content else ""
+            try:
+                max_tokens = int(self._cfg.get("anthropic_max_tokens", 4096))
+            except (ValueError, TypeError):
+                max_tokens = 4096
+            use_stream = bool(self._cfg.get("stream", False))
+
+            if use_stream:
+                chunks: list[str] = []
+                with client.messages.stream(
+                    model=self._cfg["anthropic_model"],
+                    max_tokens=max_tokens,
+                    system=system_content,
+                    messages=user_messages,
+                ) as stream:
+                    for text in stream.text_stream:
+                        if text:
+                            chunks.append(text)
+                return "".join(chunks)
+            else:
+                response = client.messages.create(
+                    model=self._cfg["anthropic_model"],
+                    max_tokens=max_tokens,
+                    system=system_content,
+                    messages=user_messages,
+                )
+                return response.content[0].text if response.content else ""
         except Exception as exc:
             return f"[Anthropic error]: {exc}"
 

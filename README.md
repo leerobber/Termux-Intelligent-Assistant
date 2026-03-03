@@ -16,7 +16,8 @@ Python is a more memory-efficient choice for resource-constrained mobile devices
 | Python  | ~8–15 MB | Lightweight interpreter |
 | Shell   | ~1–3 MB  | Best for glue scripts |
 
-This project uses **Python + stdlib only** by default — zero required third-party packages.
+This project's **Ollama (local) path uses Python + stdlib only** — zero required third-party packages for on-device inference.
+Cloud provider backends (OpenAI, Anthropic, Mistral, Llama via Groq) require their respective SDK packages, which `setup.sh` installs automatically.
 
 ---
 
@@ -101,6 +102,7 @@ python -m assistant.main config set max_history 10
 | `openai_api_key` | `""` | Your OpenAI API key |
 | `anthropic_model` | `"claude-3-5-sonnet-20241022"` | Anthropic Claude model name |
 | `anthropic_api_key` | `""` | Your Anthropic API key |
+| `anthropic_max_tokens` | `4096` | Max tokens per Anthropic response |
 | `mistral_model` | `"mistral-small-latest"` | Mistral AI model name |
 | `mistral_api_key` | `""` | Your Mistral AI API key |
 | `groq_model` | `"llama-3.3-70b-versatile"` | Llama model served by Groq |
