@@ -20,6 +20,9 @@ _DEFAULTS: dict[str, Any] = {
     "mistral_api_key": "",
     "groq_model": "llama-3.3-70b-versatile",
     "groq_api_key": "",
+    "anthropic_model": "claude-3-5-sonnet-20241022",
+    "anthropic_api_key": "",
+    "anthropic_max_tokens": 4096,
     # Memory limits — keep footprint small on mobile
     "max_history": 20,
     "stream": True,
