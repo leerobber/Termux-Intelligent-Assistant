@@ -16,14 +16,15 @@ Python is a more memory-efficient choice for resource-constrained mobile devices
 | Python  | ~8–15 MB | Lightweight interpreter |
 | Shell   | ~1–3 MB  | Best for glue scripts |
 
-This project uses **Python + stdlib only** by default — zero required third-party packages.
+This project's **Ollama (local) path uses Python + stdlib only** — zero required third-party packages for on-device inference.
+Cloud provider backends (OpenAI, Anthropic, Mistral, Llama via Groq) require their respective SDK packages, which `setup.sh` installs automatically.
 
 ---
 
 ## Features
 
 - **Local LLM via Ollama** — runs 100% on-device, no cloud required
-- **Cloud providers** — OpenAI, **Mistral AI**, and **Llama via Groq** (free tier available)
+- **Cloud providers** — OpenAI, **Anthropic Claude**, **Mistral AI**, and **Llama via Groq** (free tier available)
 - **Relative paths everywhere** — no hardcoded `/data/data/...` or `/home/...` paths
 - **SQLite conversation memory** — tiny footprint, survives restarts
 - **Streaming responses** — low peak RAM usage
@@ -54,7 +55,7 @@ Termux-Intelligent-Assistant/
 ├── assistant/
 │   ├── main.py              # Entry point & CLI
 │   ├── core/
-│   │   ├── agent.py         # AI agent (Ollama / OpenAI backends)
+│   │   ├── agent.py         # AI agent (Ollama / OpenAI / Anthropic / Mistral / Groq backends)
 │   │   ├── config.py        # Settings loader (relative paths)
 │   │   └── memory.py        # SQLite conversation history
 │   ├── tools/
@@ -94,11 +95,14 @@ python -m assistant.main config set max_history 10
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `backend` | `"ollama"` | `"ollama"`, `"openai"`, `"mistral"`, or `"llama"` |
+| `backend` | `"ollama"` | `"ollama"`, `"openai"`, `"anthropic"`, `"mistral"`, or `"llama"` |
 | `ollama_model` | `"tinyllama"` | Local model name |
 | `ollama_url` | `"http://localhost:11434"` | Ollama server URL |
 | `openai_model` | `"gpt-4o-mini"` | OpenAI model name |
 | `openai_api_key` | `""` | Your OpenAI API key |
+| `anthropic_model` | `"claude-3-5-sonnet-20241022"` | Anthropic Claude model name |
+| `anthropic_api_key` | `""` | Your Anthropic API key |
+| `anthropic_max_tokens` | `4096` | Max tokens per Anthropic response |
 | `mistral_model` | `"mistral-small-latest"` | Mistral AI model name |
 | `mistral_api_key` | `""` | Your Mistral AI API key |
 | `groq_model` | `"llama-3.3-70b-versatile"` | Llama model served by Groq |
@@ -112,6 +116,7 @@ python -m assistant.main config set max_history 10
 |----------|-----------|----------------------|
 | Ollama (local) | `ollama` | `tinyllama`, `phi3`, `llama3` |
 | OpenAI | `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` |
+| Anthropic | `anthropic` | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307` |
 | Mistral AI | `mistral` | `mistral-small-latest`, `mistral-large-latest` |
 | Llama (Groq) | `llama` | `llama-3.3-70b-versatile`, `llama3-8b-8192` |
 

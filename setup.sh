@@ -26,7 +26,7 @@ fi
 echo "Pulling tinyllama model (smallest, fastest)..."
 ollama pull tinyllama
 
-# 5. Install Python deps (mistralai and groq required for those backends)
+# 5. Install Python deps (anthropic, mistralai and groq required for those backends)
 python -m pip install --upgrade pip
 if [ -f requirements.txt ]; then
     # Strip comment lines before installing

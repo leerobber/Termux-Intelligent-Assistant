@@ -1,13 +1,16 @@
 """
 AI agent core.
 
-Supports four backends:
-  - ollama  : local LLM via Ollama HTTP API (memory-efficient, works offline)
-  - openai  : OpenAI API (requires internet + API key)
-  - mistral : Mistral AI API (requires internet + API key)
-  - llama   : Llama models via Groq API (requires internet + API key)
+Supports five backends:
+  - ollama    : local LLM via Ollama HTTP API (memory-efficient, works offline)
+  - openai    : OpenAI API (requires internet + API key)
+  - anthropic : Anthropic Claude API (requires internet + API key)
+  - mistral   : Mistral AI API (requires internet + API key)
+  - llama     : Llama models via Groq API (requires internet + API key)
 
-All backends use streaming or chunked responses to minimise peak RAM usage.
+Where supported, backends use streaming or chunked responses to minimise peak
+RAM usage (Ollama does this by default; Anthropic honours the ``stream`` config
+flag).
 """
 from __future__ import annotations
 
@@ -47,6 +50,8 @@ class Agent:
             reply = self._ollama(messages)
         elif self._backend == "openai":
             reply = self._openai(messages)
+        elif self._backend == "anthropic":
+            reply = self._anthropic(messages)
         elif self._backend == "mistral":
             reply = self._mistral(messages)
         elif self._backend == "llama":
@@ -54,7 +59,7 @@ class Agent:
         else:
             reply = (
                 f"Unknown backend '{self._backend}'. "
-                "Set backend to 'ollama', 'openai', 'mistral', or 'llama'."
+                "Set backend to 'ollama', 'openai', 'anthropic', 'mistral', or 'llama'."
             )
 
         self._memory.add("assistant", reply)
@@ -145,6 +150,58 @@ class Agent:
             return f"[OpenAI HTTP error {exc.code}]: {exc.reason}"
         except urllib.error.URLError as exc:
             return f"[OpenAI connection error]: {exc.reason}"
+
+    # ---------- Anthropic backend -------------------------------------
+
+    def _anthropic(self, messages: list[dict[str, str]]) -> str:
+        api_key = self._cfg.get("anthropic_api_key", "")
+        if not api_key:
+            return (
+                "[Anthropic API key not set]\n"
+                "Run: python -m assistant.main config set anthropic_api_key YOUR_KEY"
+            )
+
+        try:
+            import anthropic
+        except ImportError:
+            return (
+                "[anthropic package not found]\n"
+                "Run: python -m pip install anthropic"
+            )
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            # Anthropic takes the system prompt separately from the conversation
+            system_content = _SYSTEM_PROMPT
+            user_messages = [m for m in messages if m["role"] != "system"]
+            try:
+                max_tokens = int(self._cfg.get("anthropic_max_tokens", 4096))
+            except (ValueError, TypeError):
+                max_tokens = 4096
+            use_stream = bool(self._cfg.get("stream", False))
+
+            if use_stream:
+                chunks: list[str] = []
+                with client.messages.stream(
+                    model=self._cfg["anthropic_model"],
+                    max_tokens=max_tokens,
+                    system=system_content,
+                    messages=user_messages,
+                ) as stream:
+                    for text in stream.text_stream:
+                        if text:
+                            chunks.append(text)
+                return "".join(chunks)
+            else:
+                response = client.messages.create(
+                    model=self._cfg["anthropic_model"],
+                    max_tokens=max_tokens,
+                    system=system_content,
+                    messages=user_messages,
+                )
+                return response.content[0].text if response.content else ""
+        except Exception as exc:
+            return f"[Anthropic error]: {exc}"
 
     # ---------- Mistral backend ---------------------------------------
 

@@ -2,6 +2,7 @@
 # Install in Termux with:  python -m pip install -r requirements.txt
 
 # Cloud provider SDKs (required for the respective backends)
+anthropic>=0.25.0
 mistralai>=1.0.0
 groq>=1.0.0
 

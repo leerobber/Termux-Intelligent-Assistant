@@ -34,6 +34,34 @@ def test_load_merges_user_overrides(tmp_path):
     assert "ollama_model" in settings
 
 
+def test_anthropic_defaults_present(tmp_path):
+    """anthropic_model, anthropic_api_key, and anthropic_max_tokens must exist in defaults."""
+    with mock.patch.object(cfg_mod, "CONFIG_FILE", tmp_path / "missing.json"), \
+         mock.patch.object(cfg_mod, "ensure_data_dir"):
+        settings = cfg_mod.load()
+
+    assert "anthropic_model" in settings
+    assert settings["anthropic_model"] == "claude-3-5-sonnet-20241022"
+    assert "anthropic_api_key" in settings
+    assert settings["anthropic_api_key"] == ""
+    assert "anthropic_max_tokens" in settings
+    assert settings["anthropic_max_tokens"] == 4096
+
+
+def test_anthropic_defaults_survive_merge(tmp_path):
+    """anthropic_* defaults are still present when user overrides other keys."""
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps({"backend": "anthropic"}))
+
+    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
+         mock.patch.object(cfg_mod, "ensure_data_dir"):
+        settings = cfg_mod.load()
+
+    assert settings["anthropic_model"] == "claude-3-5-sonnet-20241022"
+    assert "anthropic_api_key" in settings
+    assert "anthropic_max_tokens" in settings
+
+
 def test_save_roundtrip(tmp_path):
     """save() + load() round-trip preserves values."""
     settings_file = tmp_path / "settings.json"
