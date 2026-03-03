@@ -1,0 +1,12 @@
+# Termux Intelligent Assistant — Python dependencies
+# All packages are optional; the assistant works with Python built-ins only.
+# Install in Termux with:  pip install -r requirements.txt
+
+# Faster JSON (optional — speeds up large responses)
+# ujson>=5.9
+
+# Rich terminal output (optional — enables coloured, formatted responses)
+# rich>=13.7
+
+# If you use a custom OpenAI-compatible proxy that needs httpx:
+# httpx>=0.27
