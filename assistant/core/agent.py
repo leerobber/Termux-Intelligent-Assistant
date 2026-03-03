@@ -1,11 +1,13 @@
 """
 AI agent core.
 
-Supports two backends:
+Supports four backends:
   - ollama  : local LLM via Ollama HTTP API (memory-efficient, works offline)
   - openai  : OpenAI API (requires internet + API key)
+  - mistral : Mistral AI API (requires internet + API key)
+  - llama   : Llama models via Groq API (requires internet + API key)
 
-Both backends use streaming to minimise peak RAM usage.
+All backends use streaming or chunked responses to minimise peak RAM usage.
 """
 from __future__ import annotations
 
@@ -45,8 +47,15 @@ class Agent:
             reply = self._ollama(messages)
         elif self._backend == "openai":
             reply = self._openai(messages)
+        elif self._backend == "mistral":
+            reply = self._mistral(messages)
+        elif self._backend == "llama":
+            reply = self._llama(messages)
         else:
-            reply = f"Unknown backend '{self._backend}'. Set backend to 'ollama' or 'openai'."
+            reply = (
+                f"Unknown backend '{self._backend}'. "
+                "Set backend to 'ollama', 'openai', 'mistral', or 'llama'."
+            )
 
         self._memory.add("assistant", reply)
         return reply
@@ -136,6 +145,62 @@ class Agent:
             return f"[OpenAI HTTP error {exc.code}]: {exc.reason}"
         except urllib.error.URLError as exc:
             return f"[OpenAI connection error]: {exc.reason}"
+
+    # ---------- Mistral backend ---------------------------------------
+
+    def _mistral(self, messages: list[dict[str, str]]) -> str:
+        api_key = self._cfg.get("mistral_api_key", "")
+        if not api_key:
+            return (
+                "[Mistral API key not set]\n"
+                "Run: python -m assistant.main config set mistral_api_key YOUR_KEY"
+            )
+
+        try:
+            from mistralai import Mistral
+        except ImportError:
+            return (
+                "[mistralai package not found]\n"
+                "Run: python -m pip install mistralai"
+            )
+
+        try:
+            client = Mistral(api_key=api_key)
+            response = client.chat.complete(
+                model=self._cfg["mistral_model"],
+                messages=messages,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as exc:
+            return f"[Mistral error]: {exc}"
+
+    # ---------- Llama (Groq) backend ----------------------------------
+
+    def _llama(self, messages: list[dict[str, str]]) -> str:
+        api_key = self._cfg.get("groq_api_key", "")
+        if not api_key:
+            return (
+                "[Groq API key not set]\n"
+                "Run: python -m assistant.main config set groq_api_key YOUR_KEY"
+            )
+
+        try:
+            from groq import Groq
+        except ImportError:
+            return (
+                "[groq package not found]\n"
+                "Run: python -m pip install groq"
+            )
+
+        try:
+            client = Groq(api_key=api_key)
+            response = client.chat.completions.create(
+                model=self._cfg["groq_model"],
+                messages=messages,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as exc:
+            return f"[Groq error]: {exc}"
 
     # ------------------------------------------------------------------
     def __enter__(self) -> "Agent":
