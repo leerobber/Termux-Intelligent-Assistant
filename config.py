@@ -16,6 +16,8 @@ AI_PROVIDER: str = os.environ.get("AI_PROVIDER", "openai").lower()
 AI_MODEL: str = os.environ.get("AI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY: str = os.environ.get("OPENAI_API_KEY", "")
 ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
+MISTRAL_API_KEY: str = os.environ.get("MISTRAL_API_KEY", "")
+GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
 
 MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "2048"))
 

@@ -31,12 +31,20 @@ OPENAI_API_KEY=
 # Anthropic Claude (https://console.anthropic.com/)
 ANTHROPIC_API_KEY=
 
-# Which provider to use: "openai" or "anthropic"
+# Mistral AI (https://console.mistral.ai/)
+MISTRAL_API_KEY=
+
+# Groq — used for Llama models (https://console.groq.com/keys)
+GROQ_API_KEY=
+
+# Which provider to use: "openai", "anthropic", "mistral", or "llama"
 AI_PROVIDER=openai
 
-# Model name
+# Model name (must match the chosen provider)
 # OpenAI examples:   gpt-4o, gpt-4o-mini, gpt-3.5-turbo
 # Anthropic examples: claude-3-5-sonnet-20241022, claude-3-haiku-20240307
+# Mistral examples:  mistral-small-latest, mistral-large-latest
+# Llama/Groq examples: llama-3.3-70b-versatile, llama3-8b-8192
 AI_MODEL=gpt-4o-mini
 
 # Maximum tokens per response (default: 2048)

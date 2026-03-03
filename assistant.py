@@ -52,10 +52,52 @@ def _chat_anthropic(messages: list[dict]) -> str:
     return response.content[0].text if response.content else ""
 
 
+def _chat_mistral(messages: list[dict]) -> str:
+    """Send messages to Mistral AI and return the assistant reply."""
+    try:
+        from mistralai import Mistral
+    except ImportError:
+        sys.exit("mistralai package not found. Run: pip install mistralai")
+
+    if not config.MISTRAL_API_KEY:
+        sys.exit("MISTRAL_API_KEY is not set. Edit config.env and try again.")
+
+    client = Mistral(api_key=config.MISTRAL_API_KEY)
+    response = client.chat.complete(
+        model=config.AI_MODEL,
+        messages=messages,
+        max_tokens=config.MAX_TOKENS,
+    )
+    return response.choices[0].message.content or ""
+
+
+def _chat_llama(messages: list[dict]) -> str:
+    """Send messages to Llama (via Groq) and return the assistant reply."""
+    try:
+        from groq import Groq
+    except ImportError:
+        sys.exit("groq package not found. Run: pip install groq")
+
+    if not config.GROQ_API_KEY:
+        sys.exit("GROQ_API_KEY is not set. Edit config.env and try again.")
+
+    client = Groq(api_key=config.GROQ_API_KEY)
+    response = client.chat.completions.create(
+        model=config.AI_MODEL,
+        messages=messages,
+        max_tokens=config.MAX_TOKENS,
+    )
+    return response.choices[0].message.content or ""
+
+
 def chat(messages: list[dict]) -> str:
     """Route a conversation to the configured AI provider."""
     if config.AI_PROVIDER == "anthropic":
         return _chat_anthropic(messages)
+    if config.AI_PROVIDER == "mistral":
+        return _chat_mistral(messages)
+    if config.AI_PROVIDER == "llama":
+        return _chat_llama(messages)
     return _chat_openai(messages)
 
 
