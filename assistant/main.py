@@ -7,7 +7,14 @@ Usage:
     python -m assistant.main config set KEY VALUE
     python -m assistant.main history clear    # clear conversation history
 """
+import logging
+import re
 import sys
+
+
+def _extract_bash_blocks(text: str) -> list[str]:
+    """Return a list of commands found inside ```bash … ``` fences in *text*."""
+    return re.findall(r"```bash\s*(.*?)```", text, re.DOTALL)
 
 
 def _cmd_config(args: list[str]) -> None:
@@ -41,6 +48,11 @@ def _cmd_history(args: list[str]) -> None:
 
 def _interactive() -> None:
     from assistant.core.agent import Agent
+    from assistant.core.config import load as load_config
+    from assistant.tools.shell import safe_run
+
+    cfg = load_config()
+    logging.basicConfig(level=getattr(logging, cfg.get("log_level", "WARNING"), logging.WARNING))
 
     print("Termux Intelligent Assistant  (type 'exit' or Ctrl-C to quit)\n")
     with Agent() as agent:
@@ -57,6 +69,27 @@ def _interactive() -> None:
                 break
             reply = agent.chat(user_input)
             print(f"\nAssistant: {reply}\n")
+
+            bash_blocks = _extract_bash_blocks(reply)
+            if bash_blocks:
+                for block in bash_blocks:
+                    block = block.strip()
+                    if not block:
+                        continue
+                    indented = "\n".join(f"  {line}" for line in block.splitlines())
+                    print(f"Suggested command:\n{indented}")
+                    try:
+                        choice = input("Run this command? [y/N] ").strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        print()
+                        break
+                    if choice == "y":
+                        result = safe_run(block)
+                        if result.output:
+                            print(result.output)
+                        if not result.ok:
+                            print(f"[exited with code {result.returncode}]")
+                    print()
 
 
 def main(argv: list[str] | None = None) -> None:
