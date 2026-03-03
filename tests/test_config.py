@@ -74,3 +74,92 @@ def test_save_roundtrip(tmp_path):
 
     assert loaded["backend"] == "openai"
     assert loaded["max_history"] == 10
+
+
+# ---------------------------------------------------------------------------
+# _normalize tests
+# ---------------------------------------------------------------------------
+
+def test_normalize_string_to_int():
+    """_normalize converts a string to int when default is int."""
+    assert cfg_mod._normalize("5", 20) == 5
+    assert isinstance(cfg_mod._normalize("5", 20), int)
+
+
+def test_normalize_string_bool_true():
+    """_normalize converts truthy string to True when default is bool."""
+    for raw in ("true", "True", "1", "yes"):
+        assert cfg_mod._normalize(raw, True) is True
+
+
+def test_normalize_string_bool_false():
+    """_normalize converts falsy string to False when default is bool."""
+    for raw in ("false", "False", "0", "no"):
+        assert cfg_mod._normalize(raw, True) is False
+
+
+def test_normalize_bool_unchanged():
+    """_normalize leaves a correctly-typed bool unchanged."""
+    assert cfg_mod._normalize(False, True) is False
+    assert cfg_mod._normalize(True, True) is True
+
+
+def test_normalize_int_for_bool_default():
+    """_normalize coerces 0/1 integer to bool when default is bool."""
+    assert cfg_mod._normalize(0, True) is False
+    assert cfg_mod._normalize(1, True) is True
+
+
+def test_normalize_invalid_string_for_int_returns_unchanged():
+    """_normalize returns original value when string cannot be coerced to int."""
+    result = cfg_mod._normalize("notanumber", 20)
+    assert result == "notanumber"
+
+
+def test_normalize_correct_type_unchanged():
+    """_normalize returns value as-is when it already matches default type."""
+    assert cfg_mod._normalize(42, 20) == 42
+    assert cfg_mod._normalize("openai", "ollama") == "openai"
+
+
+# ---------------------------------------------------------------------------
+# load() normalization tests
+# ---------------------------------------------------------------------------
+
+def test_load_normalizes_string_int(tmp_path):
+    """load() coerces string-typed int values from legacy config files."""
+    settings_file = tmp_path / "settings.json"
+    # Simulate legacy config with max_history stored as string
+    settings_file.write_text(json.dumps({"max_history": "7"}))
+
+    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
+         mock.patch.object(cfg_mod, "ensure_data_dir"):
+        settings = cfg_mod.load()
+
+    assert settings["max_history"] == 7
+    assert isinstance(settings["max_history"], int)
+
+
+def test_load_normalizes_string_bool(tmp_path):
+    """load() coerces string-typed bool values from legacy config files."""
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps({"stream": "false"}))
+
+    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
+         mock.patch.object(cfg_mod, "ensure_data_dir"):
+        settings = cfg_mod.load()
+
+    assert settings["stream"] is False
+
+
+def test_load_normalizes_string_anthropic_max_tokens(tmp_path):
+    """load() coerces string anthropic_max_tokens to int."""
+    settings_file = tmp_path / "settings.json"
+    settings_file.write_text(json.dumps({"anthropic_max_tokens": "1024"}))
+
+    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
+         mock.patch.object(cfg_mod, "ensure_data_dir"):
+        settings = cfg_mod.load()
+
+    assert settings["anthropic_max_tokens"] == 1024
+    assert isinstance(settings["anthropic_max_tokens"], int)
