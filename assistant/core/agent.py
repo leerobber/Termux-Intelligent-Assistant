@@ -49,12 +49,14 @@ class Agent:
             reply = self._openai(messages)
         elif self._backend == "mistral":
             reply = self._mistral(messages)
+        elif self._backend == "anthropic":
+            reply = self._anthropic(messages)
         elif self._backend == "llama":
             reply = self._llama(messages)
         else:
             reply = (
                 f"Unknown backend '{self._backend}'. "
-                "Set backend to 'ollama', 'openai', 'mistral', or 'llama'."
+                "Set backend to 'ollama', 'openai', 'mistral', 'anthropic', or 'llama'."
             )
 
         self._memory.add("assistant", reply)
@@ -173,6 +175,38 @@ class Agent:
             return response.choices[0].message.content or ""
         except Exception as exc:
             return f"[Mistral error]: {exc}"
+
+    # ---------- Anthropic backend -------------------------------------
+
+    def _anthropic(self, messages: list[dict[str, str]]) -> str:
+        api_key = self._cfg.get("anthropic_api_key", "")
+        if not api_key:
+            return (
+                "[Anthropic API key not set]\n"
+                "Run: python -m assistant.main config set anthropic_api_key YOUR_KEY"
+            )
+
+        try:
+            import anthropic
+        except ImportError:
+            return (
+                "[anthropic package not found]\n"
+                "Run: python -m pip install anthropic"
+            )
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            # Anthropic takes the system prompt separately; strip it from messages
+            non_system = [m for m in messages if m["role"] != "system"]
+            response = client.messages.create(
+                model=self._cfg["anthropic_model"],
+                max_tokens=self._cfg.get("anthropic_max_tokens", 4096),
+                system=_SYSTEM_PROMPT,
+                messages=non_system,
+            )
+            return response.content[0].text if response.content else ""
+        except Exception as exc:
+            return f"[Anthropic error]: {exc}"
 
     # ---------- Llama (Groq) backend ----------------------------------
 

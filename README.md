@@ -23,7 +23,7 @@ This project uses **Python + stdlib only** by default — zero required third-pa
 ## Features
 
 - **Local LLM via Ollama** — runs 100% on-device, no cloud required
-- **Cloud providers** — OpenAI, **Mistral AI**, and **Llama via Groq** (free tier available)
+- **Cloud providers** — OpenAI, **Anthropic Claude**, **Mistral AI**, and **Llama via Groq** (free tier available)
 - **Relative paths everywhere** — no hardcoded `/data/data/...` or `/home/...` paths
 - **SQLite conversation memory** — tiny footprint, survives restarts
 - **Streaming responses** — low peak RAM usage
@@ -94,7 +94,7 @@ python -m assistant.main config set max_history 10
 
 | Key | Default | Description |
 |-----|---------|-------------|
-| `backend` | `"ollama"` | `"ollama"`, `"openai"`, `"mistral"`, or `"llama"` |
+| `backend` | `"ollama"` | `"ollama"`, `"openai"`, `"mistral"`, `"anthropic"`, or `"llama"` |
 | `ollama_model` | `"tinyllama"` | Local model name |
 | `ollama_url` | `"http://localhost:11434"` | Ollama server URL |
 | `openai_model` | `"gpt-4o-mini"` | OpenAI model name |
@@ -103,6 +103,9 @@ python -m assistant.main config set max_history 10
 | `mistral_api_key` | `""` | Your Mistral AI API key |
 | `groq_model` | `"llama-3.3-70b-versatile"` | Llama model served by Groq |
 | `groq_api_key` | `""` | Your Groq API key (for Llama models) |
+| `anthropic_model` | `"claude-3-5-sonnet-20241022"` | Anthropic model name |
+| `anthropic_api_key` | `""` | Your Anthropic API key |
+| `anthropic_max_tokens` | `4096` | Max tokens in each Anthropic response |
 | `max_history` | `20` | Max messages kept in memory |
 | `stream` | `true` | Stream tokens for lower peak RAM |
 
@@ -114,6 +117,7 @@ python -m assistant.main config set max_history 10
 | OpenAI | `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` |
 | Mistral AI | `mistral` | `mistral-small-latest`, `mistral-large-latest` |
 | Llama (Groq) | `llama` | `llama-3.3-70b-versatile`, `llama3-8b-8192` |
+| Anthropic | `anthropic` | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307` |
 
 ---
 
