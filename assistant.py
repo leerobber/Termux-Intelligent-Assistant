@@ -26,6 +26,7 @@ def _chat_openai(messages: list[dict]) -> str:
     response = client.chat.completions.create(
         model=config.AI_MODEL,
         messages=messages,
+        max_tokens=config.MAX_TOKENS,
     )
     return response.choices[0].message.content or ""
 
@@ -92,13 +93,18 @@ def _chat_llama(messages: list[dict]) -> str:
 
 def chat(messages: list[dict]) -> str:
     """Route a conversation to the configured AI provider."""
+    if config.AI_PROVIDER == "openai":
+        return _chat_openai(messages)
     if config.AI_PROVIDER == "anthropic":
         return _chat_anthropic(messages)
     if config.AI_PROVIDER == "mistral":
         return _chat_mistral(messages)
     if config.AI_PROVIDER == "llama":
         return _chat_llama(messages)
-    return _chat_openai(messages)
+    sys.exit(
+        f"Unknown AI_PROVIDER '{config.AI_PROVIDER}'. "
+        "Supported providers: openai, anthropic, mistral, llama."
+    )
 
 
 # ---------------------------------------------------------------------------

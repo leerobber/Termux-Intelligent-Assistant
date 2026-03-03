@@ -4,6 +4,10 @@
 
 set -e
 
+# Change to the directory where this script lives so all relative paths work
+# correctly regardless of the working directory when the script is invoked.
+cd "$(dirname "$0")"
+
 echo "=== Termux Intelligent Assistant Setup ==="
 
 # Update package list and upgrade existing packages
@@ -15,8 +19,8 @@ pkg install -y python python-pip git curl openssh
 
 # Install Python dependencies
 echo "[*] Installing Python dependencies..."
-pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 # Create default config if it doesn't exist
 if [ ! -f config.env ]; then

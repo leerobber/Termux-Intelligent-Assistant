@@ -19,7 +19,22 @@ ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
 MISTRAL_API_KEY: str = os.environ.get("MISTRAL_API_KEY", "")
 GROQ_API_KEY: str = os.environ.get("GROQ_API_KEY", "")
 
-MAX_TOKENS: int = int(os.environ.get("MAX_TOKENS", "2048"))
+def _get_int_env(name: str, default: int) -> int:
+    """Safely read an integer value from the environment, falling back to *default* on errors."""
+    value = os.environ.get(name)
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        print(
+            f"Warning: invalid integer for {name!r}: {value!r}. "
+            f"Using default {default}."
+        )
+        return default
+
+
+MAX_TOKENS: int = _get_int_env("MAX_TOKENS", 2048)
 
 SYSTEM_PROMPT: str = (
     "You are an intelligent assistant embedded in a Termux terminal on Android. "
