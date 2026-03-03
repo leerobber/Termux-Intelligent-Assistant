@@ -3,6 +3,10 @@
 # Run once after cloning:  bash setup.sh
 set -euo pipefail
 
+# Change to the directory where this script lives so all relative paths work
+# correctly regardless of the working directory when the script is invoked.
+cd "$(dirname "$0")"
+
 echo "=== Termux Intelligent Assistant Setup ==="
 
 # 1. Update package index
@@ -22,11 +26,11 @@ fi
 echo "Pulling tinyllama model (smallest, fastest)..."
 ollama pull tinyllama
 
-# 5. Install Python deps (all optional — pure stdlib works too)
-pip install --upgrade pip
+# 5. Install Python deps (mistralai and groq required for those backends)
+python -m pip install --upgrade pip
 if [ -f requirements.txt ]; then
     # Strip comment lines before installing
-    grep -v '^\s*#' requirements.txt | grep -v '^\s*$' | pip install -r /dev/stdin || true
+    grep -v '^\s*#' requirements.txt | grep -v '^\s*$' | python -m pip install -r /dev/stdin || true
 fi
 
 # 6. Verify the assistant can be imported

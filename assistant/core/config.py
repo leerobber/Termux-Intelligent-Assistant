@@ -10,12 +10,16 @@ from typing import Any
 from assistant.utils.paths import CONFIG_FILE, ensure_data_dir
 
 _DEFAULTS: dict[str, Any] = {
-    # Backend: "ollama" (local LLM) or "openai" (cloud API)
+    # Backend: "ollama" (local LLM), "openai", "mistral", or "llama" (via Groq)
     "backend": "ollama",
     "ollama_model": "tinyllama",      # tiny model — low RAM footprint
     "ollama_url": "http://localhost:11434",
     "openai_model": "gpt-4o-mini",
     "openai_api_key": "",
+    "mistral_model": "mistral-small-latest",
+    "mistral_api_key": "",
+    "groq_model": "llama-3.3-70b-versatile",
+    "groq_api_key": "",
     # Memory limits — keep footprint small on mobile
     "max_history": 20,
     "stream": True,
