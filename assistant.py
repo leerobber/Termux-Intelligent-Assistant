@@ -27,6 +27,7 @@ def _chat_openai(messages: list[dict]) -> str:
         model=config.AI_MODEL,
         messages=messages,
         max_tokens=config.MAX_TOKENS,
+        max_tokens=config.MAX_TOKENS,
     )
     return response.choices[0].message.content or ""
 
