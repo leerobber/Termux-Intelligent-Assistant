@@ -208,6 +208,16 @@ class Agent:
                     "Run: python -m assistant.main config set anthropic_max_tokens 4096"
                 )
 
+            max_tokens_raw = self._cfg.get("anthropic_max_tokens", 4096)
+            try:
+                max_tokens = int(max_tokens_raw)
+            except (TypeError, ValueError):
+                return (
+                    "[Invalid anthropic_max_tokens]\n"
+                    f"Expected an integer, got {max_tokens_raw!r}. "
+                    "Run: python -m assistant.main config set anthropic_max_tokens 4096"
+                )
+
             response = client.messages.create(
                 model=self._cfg["anthropic_model"],
                 max_tokens=max_tokens,
