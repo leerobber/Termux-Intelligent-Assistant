@@ -1,0 +1,281 @@
+# Instincts generated from https://github.com/leerobber/Termux-Intelligent-Assistant
+# Generated: 2026-04-04T19:40:23.290Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: Termux-Intelligent-Assistant-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat
+
+## Evidence
+
+- 1 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: Sovereign Core rewrite — remove cloud APIs, add sovereign backend
+
+---
+id: Termux-Intelligent-Assistant-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Commit Length
+
+## Action
+
+Write moderate-length commit messages (~71 characters)
+
+## Evidence
+
+- Average commit message length: 71 chars
+- Based on 1 commits
+
+---
+id: Termux-Intelligent-Assistant-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Naming Files
+
+## Action
+
+Use camelCase naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: camelCase
+
+---
+id: Termux-Intelligent-Assistant-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: Termux-Intelligent-Assistant-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: Termux-Intelligent-Assistant-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: termux-intelligent-assistant-instinct-file-naming
+trigger: "When creating a new Python file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct File Naming
+
+## Action
+
+Name the file using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.files
+
+---
+id: termux-intelligent-assistant-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Function Naming
+
+## Action
+
+Name the function using camelCase
+
+## Evidence
+
+- Pattern in namingConventions.functions
+
+---
+id: termux-intelligent-assistant-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Class Naming
+
+## Action
+
+Name the class using PascalCase
+
+## Evidence
+
+- Pattern in namingConventions.classes
+
+---
+id: termux-intelligent-assistant-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Constant Naming
+
+## Action
+
+Name the constant using SCREAMING_SNAKE_CASE
+
+## Evidence
+
+- Pattern in namingConventions.constants
+
+---
+id: termux-intelligent-assistant-instinct-import-style
+trigger: "When importing modules within the project"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in importStyle
+
+---
+id: termux-intelligent-assistant-instinct-export-style
+trigger: "When exporting functions or classes from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle
+
+---
+id: termux-intelligent-assistant-instinct-test-location
+trigger: "When adding new tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Test Location
+
+## Action
+
+Place test files in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in folderStructure.testLocation
+- Common folder 'tests'
+
+---
+id: termux-intelligent-assistant-instinct-commit-format
+trigger: "When writing a git commit message"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: leerobber/Termux-Intelligent-Assistant
+---
+
+# Termux Intelligent Assistant Instinct Commit Format
+
+## Action
+
+Start the message with the 'feat:' prefix and use conventional commit format
+
+## Evidence
+
+- Pattern in commits.prefixes
+- Seen in commit 'feat: Sovereign Core rewrite — remove cloud APIs, add sovereign backend'
+
