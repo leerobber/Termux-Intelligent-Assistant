@@ -1,16 +1,14 @@
 """
-AI agent core.
+AI agent core — Sovereign Core edition.
 
-Supports five backends:
-  - ollama    : local LLM via Ollama HTTP API (memory-efficient, works offline)
-  - openai    : OpenAI API (requires internet + API key)
-  - anthropic : Anthropic Claude API (requires internet + API key)
-  - mistral   : Mistral AI API (requires internet + API key)
-  - llama     : Llama models via Groq API (requires internet + API key)
+Backends (in priority order):
+  sovereign : Qwen2.5-32B-AWQ via OpenAI-compatible REST API
+              (no API key, no cloud, full control — served by vLLM/litellm
+               on TatorTot or localhost at port 8001)
+  ollama    : local LLM via Ollama HTTP API (on-device, offline fallback)
 
-Where supported, backends use streaming or chunked responses to minimise peak
-RAM usage (Ollama does this by default; Anthropic honours the ``stream`` config
-flag).
+Both backends support streaming to minimise peak RAM usage on mobile.
+Zero third-party dependencies — uses only Python stdlib (urllib, json).
 """
 from __future__ import annotations
 
@@ -22,23 +20,26 @@ from typing import Any, Iterator
 
 from assistant.core.config import load as load_config
 from assistant.core.memory import Memory
+from assistant.tools.system_info import get_context
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
     "You are an intelligent assistant specialized in Termux and mobile Linux. "
     "Give concise, accurate answers. When suggesting shell commands, wrap them "
-    "in ```bash ... ``` fences."
+    "in ```bash ... ``` fences.\n\n"
+    "{context}"
 )
 
 
 class Agent:
-    """Stateful conversational agent with pluggable backends."""
+    """Stateful conversational agent with Sovereign Core and Ollama backends."""
 
     def __init__(self) -> None:
         self._cfg = load_config()
         self._memory = Memory(max_history=self._cfg["max_history"])
         self._backend: str = self._cfg["backend"]
+        self._system_prompt = _SYSTEM_PROMPT.format(context=get_context())
 
     # ------------------------------------------------------------------
     def chat(self, user_input: str) -> str:
@@ -46,24 +47,48 @@ class Agent:
         self._memory.add("user", user_input)
         messages = self._build_messages()
 
-        if self._backend == "ollama":
+        if self._backend == "sovereign":
+            reply = self._sovereign(messages)
+        elif self._backend == "ollama":
             reply = self._ollama(messages)
-        elif self._backend == "openai":
-            reply = self._openai(messages)
-        elif self._backend == "anthropic":
-            reply = self._anthropic(messages)
-        elif self._backend == "mistral":
-            reply = self._mistral(messages)
-        elif self._backend == "llama":
-            reply = self._llama(messages)
         else:
             reply = (
                 f"Unknown backend '{self._backend}'. "
-                "Set backend to 'ollama', 'openai', 'anthropic', 'mistral', or 'llama'."
+                "Set backend to 'sovereign' or 'ollama'.\n"
+                "Run: python -m assistant.main config set backend sovereign"
             )
 
         self._memory.add("assistant", reply)
         return reply
+
+    def chat_stream(self, user_input: str) -> Iterator[str]:
+        """Stream tokens from *user_input*; yields each token as it arrives.
+
+        Stores the full assembled reply in memory on completion.
+        """
+        self._memory.add("user", user_input)
+        messages = self._build_messages()
+        chunks: list[str] = []
+
+        if self._backend == "sovereign":
+            gen = self._sovereign_stream(messages)
+        elif self._backend == "ollama":
+            gen = self._ollama_stream(messages)
+        else:
+            error_msg = (
+                f"Unknown backend '{self._backend}'. "
+                "Set backend to 'sovereign' or 'ollama'."
+            )
+            yield error_msg
+            self._memory.add("assistant", error_msg)
+            return
+
+        for token in gen:
+            chunks.append(token)
+            yield token
+
+        full_reply = "".join(chunks)
+        self._memory.add("assistant", full_reply)
 
     def clear_history(self) -> None:
         self._memory.clear()
@@ -71,24 +96,48 @@ class Agent:
     def close(self) -> None:
         self._memory.close()
 
+    def status(self) -> dict[str, Any]:
+        """Return a brief health-check dict for the configured backend."""
+        result: dict[str, Any] = {
+            "backend": self._backend,
+            "reachable": False,
+            "model": None,
+        }
+        try:
+            if self._backend == "sovereign":
+                url = self._cfg["sovereign_url"].rstrip("/") + "/v1/models"
+                result["model"] = self._cfg["sovereign_model"]
+            else:
+                url = self._cfg["ollama_url"].rstrip("/") + "/api/tags"
+                result["model"] = self._cfg["ollama_model"]
+            req = urllib.request.Request(url, method="GET")
+            with urllib.request.urlopen(req, timeout=5):
+                result["reachable"] = True
+        except Exception:
+            pass
+        return result
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
     def _build_messages(self) -> list[dict[str, str]]:
-        return [{"role": "system", "content": _SYSTEM_PROMPT}] + self._memory.recent()
+        return [{"role": "system", "content": self._system_prompt}] + self._memory.recent()
 
-    # ---------- Ollama backend ----------------------------------------
+    # ---------- Sovereign backend (OpenAI-compatible) -----------------
 
-    def _ollama(self, messages: list[dict[str, str]]) -> str:
-        url = self._cfg["ollama_url"].rstrip("/") + "/api/chat"
-        payload = json.dumps(
-            {
-                "model": self._cfg["ollama_model"],
-                "messages": messages,
-                "stream": self._cfg.get("stream", True),
-            }
-        ).encode()
+    def _sovereign(self, messages: list[dict[str, str]]) -> str:
+        """Non-streaming sovereign request (collects full reply)."""
+        return "".join(self._sovereign_stream(messages))
+
+    def _sovereign_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
+        """Stream tokens from the Sovereign Core endpoint (SSE)."""
+        url = self._cfg["sovereign_url"].rstrip("/") + "/v1/chat/completions"
+        payload = json.dumps({
+            "model": self._cfg["sovereign_model"],
+            "messages": messages,
+            "stream": True,
+        }).encode()
 
         req = urllib.request.Request(
             url,
@@ -96,168 +145,82 @@ class Agent:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        chunks: list[str] = []
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                for line in resp:
-                    if not line.strip():
+            with urllib.request.urlopen(req, timeout=self._cfg.get("timeout", 60)) as resp:
+                for raw_line in resp:
+                    line = raw_line.decode("utf-8", errors="replace").strip()
+                    if not line or not line.startswith("data:"):
                         continue
-                    data = json.loads(line)
-                    token = data.get("message", {}).get("content", "")
-                    chunks.append(token)
-                    if data.get("done"):
+                    payload_str = line[len("data:"):].strip()
+                    if payload_str == "[DONE]":
                         break
+                    try:
+                        data = json.loads(payload_str)
+                        token = (
+                            data.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content", "")
+                        )
+                        if token:
+                            yield token
+                    except json.JSONDecodeError:
+                        continue
         except urllib.error.URLError as exc:
-            return (
-                f"[Ollama not available: {exc.reason}]\n"
-                "Start Ollama with: ollama serve\n"
-                f"Pull a small model: ollama pull {self._cfg['ollama_model']}"
-            )
-        return "".join(chunks)
-
-    # ---------- OpenAI backend ----------------------------------------
-
-    def _openai(self, messages: list[dict[str, str]]) -> str:
-        api_key = self._cfg.get("openai_api_key", "")
-        if not api_key:
-            return (
-                "[OpenAI API key not set]\n"
-                "Run: python -m assistant.main config set openai_api_key YOUR_KEY"
+            url_display = self._cfg["sovereign_url"]
+            yield (
+                f"\n[Sovereign Core not reachable: {exc.reason}]\n"
+                f"  Expected endpoint: {url_display}:8001\n"
+                "  On TatorTot, start vLLM with:\n"
+                "    vllm serve Qwen/Qwen2.5-32B-AWQ --port 8001\n"
+                "  Then set your endpoint:\n"
+                f"    python -m assistant.main config set sovereign_url http://<tatortot-ip>:8001\n"
+                "  Or fall back to on-device Ollama:\n"
+                "    python -m assistant.main config set backend ollama"
             )
 
-        url = "https://api.openai.com/v1/chat/completions"
-        payload = json.dumps(
-            {
-                "model": self._cfg["openai_model"],
-                "messages": messages,
-                "stream": False,
-            }
-        ).encode()
+    # ---------- Ollama backend ----------------------------------------
+
+    def _ollama(self, messages: list[dict[str, str]]) -> str:
+        """Non-streaming Ollama request (collects full reply)."""
+        return "".join(self._ollama_stream(messages))
+
+    def _ollama_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
+        """Stream tokens from the local Ollama endpoint."""
+        url = self._cfg["ollama_url"].rstrip("/") + "/api/chat"
+        payload = json.dumps({
+            "model": self._cfg["ollama_model"],
+            "messages": messages,
+            "stream": True,
+        }).encode()
+
         req = urllib.request.Request(
             url,
             data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {api_key}",
-            },
+            headers={"Content-Type": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.load(resp)
-            return data["choices"][0]["message"]["content"]
-        except urllib.error.HTTPError as exc:
-            return f"[OpenAI HTTP error {exc.code}]: {exc.reason}"
+            with urllib.request.urlopen(req, timeout=self._cfg.get("timeout", 60)) as resp:
+                for raw_line in resp:
+                    if not raw_line.strip():
+                        continue
+                    try:
+                        data = json.loads(raw_line)
+                        token = data.get("message", {}).get("content", "")
+                        if token:
+                            yield token
+                        if data.get("done"):
+                            break
+                    except json.JSONDecodeError:
+                        continue
         except urllib.error.URLError as exc:
-            return f"[OpenAI connection error]: {exc.reason}"
-
-    # ---------- Anthropic backend -------------------------------------
-
-    def _anthropic(self, messages: list[dict[str, str]]) -> str:
-        api_key = self._cfg.get("anthropic_api_key", "")
-        if not api_key:
-            return (
-                "[Anthropic API key not set]\n"
-                "Run: python -m assistant.main config set anthropic_api_key YOUR_KEY"
+            yield (
+                f"\n[Ollama not available: {exc.reason}]\n"
+                "  Start Ollama:  ollama serve\n"
+                f"  Pull a model:  ollama pull {self._cfg['ollama_model']}\n"
+                "  Or point at TatorTot:\n"
+                "    python -m assistant.main config set backend sovereign"
             )
-
-        try:
-            import anthropic
-        except ImportError:
-            return (
-                "[anthropic package not found]\n"
-                "Run: python -m pip install anthropic"
-            )
-
-        try:
-            client = anthropic.Anthropic(api_key=api_key)
-            # Anthropic takes the system prompt separately from the conversation
-            system_content = _SYSTEM_PROMPT
-            user_messages = [m for m in messages if m["role"] != "system"]
-            try:
-                max_tokens = int(self._cfg.get("anthropic_max_tokens", 4096))
-            except (ValueError, TypeError):
-                max_tokens = 4096
-            use_stream = bool(self._cfg.get("stream", False))
-
-            if use_stream:
-                chunks: list[str] = []
-                with client.messages.stream(
-                    model=self._cfg["anthropic_model"],
-                    max_tokens=max_tokens,
-                    system=system_content,
-                    messages=user_messages,
-                ) as stream:
-                    for text in stream.text_stream:
-                        if text:
-                            chunks.append(text)
-                return "".join(chunks)
-            else:
-                response = client.messages.create(
-                    model=self._cfg["anthropic_model"],
-                    max_tokens=max_tokens,
-                    system=system_content,
-                    messages=user_messages,
-                )
-                return response.content[0].text if response.content else ""
-        except Exception as exc:
-            return f"[Anthropic error]: {exc}"
-
-    # ---------- Mistral backend ---------------------------------------
-
-    def _mistral(self, messages: list[dict[str, str]]) -> str:
-        api_key = self._cfg.get("mistral_api_key", "")
-        if not api_key:
-            return (
-                "[Mistral API key not set]\n"
-                "Run: python -m assistant.main config set mistral_api_key YOUR_KEY"
-            )
-
-        try:
-            from mistralai import Mistral
-        except ImportError:
-            return (
-                "[mistralai package not found]\n"
-                "Run: python -m pip install mistralai"
-            )
-
-        try:
-            client = Mistral(api_key=api_key)
-            response = client.chat.complete(
-                model=self._cfg["mistral_model"],
-                messages=messages,
-            )
-            return response.choices[0].message.content or ""
-        except Exception as exc:
-            return f"[Mistral error]: {exc}"
-
-    # ---------- Llama (Groq) backend ----------------------------------
-
-    def _llama(self, messages: list[dict[str, str]]) -> str:
-        api_key = self._cfg.get("groq_api_key", "")
-        if not api_key:
-            return (
-                "[Groq API key not set]\n"
-                "Run: python -m assistant.main config set groq_api_key YOUR_KEY"
-            )
-
-        try:
-            from groq import Groq
-        except ImportError:
-            return (
-                "[groq package not found]\n"
-                "Run: python -m pip install groq"
-            )
-
-        try:
-            client = Groq(api_key=api_key)
-            response = client.chat.completions.create(
-                model=self._cfg["groq_model"],
-                messages=messages,
-            )
-            return response.choices[0].message.content or ""
-        except Exception as exc:
-            return f"[Groq error]: {exc}"
 
     # ------------------------------------------------------------------
     def __enter__(self) -> "Agent":

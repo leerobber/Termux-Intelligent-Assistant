@@ -1,4 +1,3 @@
 {
-  "backend": "openai",
-  "max_history": 10
+  "backend": "sovereign"
 }
