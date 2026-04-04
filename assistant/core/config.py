@@ -1,8 +1,12 @@
 """
-Configuration loader.
+Configuration loader — Sovereign Core edition.
 
 Reads settings from config/settings.json (relative path resolved at runtime).
 Falls back to sensible defaults so the assistant works out of the box.
+
+Backends (priority order):
+    sovereign : Qwen2.5-32B-AWQ via OpenAI-compatible API @ TatorTot / localhost
+    ollama    : on-device Ollama (fallback / offline mode)
 """
 import json
 from typing import Any
@@ -16,7 +20,6 @@ def _normalize(value: Any, default: Any) -> Any:
     Handles legacy config files where values may have been stored as strings.
     Returns *value* unchanged when coercion is not applicable or fails.
     """
-    # bool must be checked before int (bool is a subclass of int)
     if isinstance(default, bool):
         if isinstance(value, bool):
             return value
@@ -40,23 +43,28 @@ def _normalize(value: Any, default: Any) -> Any:
             return value
     return value
 
+
 _DEFAULTS: dict[str, Any] = {
-    # Backend: "ollama" (local LLM), "openai", "anthropic", "mistral", or "llama" (via Groq)
-    "backend": "ollama",
-    "ollama_model": "tinyllama",      # tiny model — low RAM footprint
+    # ── Backend ──────────────────────────────────────────────────────────────
+    # "sovereign" → Qwen2.5-32B-AWQ via local OpenAI-compatible endpoint
+    # "ollama"    → on-device Ollama (low RAM, offline)
+    "backend": "sovereign",
+
+    # ── Sovereign Core (primary) ─────────────────────────────────────────────
+    # Point at TatorTot over LAN:  http://192.168.x.x:8001
+    # Or localhost when running on the same machine:  http://localhost:8001
+    "sovereign_url": "http://localhost:8001",
+    "sovereign_model": "openai/qwen2.5-32b-awq",
+
+    # ── Ollama (fallback / on-device) ────────────────────────────────────────
     "ollama_url": "http://localhost:11434",
-    "openai_model": "gpt-4o-mini",
-    "openai_api_key": "",
-    "anthropic_model": "claude-3-5-sonnet-20241022",
-    "anthropic_api_key": "",
-    "anthropic_max_tokens": 4096,
-    "mistral_model": "mistral-small-latest",
-    "mistral_api_key": "",
-    "groq_model": "llama-3.3-70b-versatile",
-    "groq_api_key": "",
-    # Memory limits — keep footprint small on mobile
-    "max_history": 20,
-    "stream": True,
+    "ollama_model": "tinyllama",
+
+    # ── Behaviour ────────────────────────────────────────────────────────────
+    "max_history": 20,        # messages kept in SQLite rolling window
+    "stream": True,           # stream tokens as they arrive
+    "auto_run_bash": False,   # auto-execute AI-suggested bash without prompt
+    "timeout": 60,            # HTTP request timeout (seconds)
     "log_level": "WARNING",
 }
 
@@ -72,7 +80,6 @@ def load() -> dict[str, Any]:
             with CONFIG_FILE.open() as fh:
                 user = json.load(fh)
             merged = {**_DEFAULTS, **user}
-            # Normalize types to fix values stored with wrong types (e.g. strings)
             for key, default in _DEFAULTS.items():
                 merged[key] = _normalize(merged[key], default)
             return merged

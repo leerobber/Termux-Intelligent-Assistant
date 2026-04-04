@@ -1,13 +1,13 @@
 # Termux Intelligent Assistant — Python dependencies
-# Install in Termux with:  python -m pip install -r requirements.txt
+# Install with:  python -m pip install -r requirements.txt
+#
+# Sovereign Core edition: zero cloud SDK dependencies.
+# All backends (sovereign, ollama) use stdlib urllib — no pip packages required.
+#
+# Optional extras (uncomment to enable):
 
-# Cloud provider SDKs (required for the respective backends)
-anthropic>=0.25.0
-mistralai>=1.0.0
-groq>=1.0.0
-
-# Faster JSON (optional — speeds up large responses)
-# ujson>=5.9
-
-# Rich terminal output (optional — enables coloured, formatted responses)
+# Rich terminal output — coloured, formatted responses
 # rich>=13.7
+
+# Faster JSON parsing — useful on low-RAM Android devices
+# ujson>=5.9

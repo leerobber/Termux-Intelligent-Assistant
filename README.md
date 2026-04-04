@@ -1,174 +1,134 @@
-# Termux Intelligent Assistant
+# Termux Intelligent Assistant — Sovereign Core Edition
 
-An agentic AI assistant built for **Termux on Android** — designed for low memory usage and written entirely in Python (no Node.js required).
+An agentic AI assistant for Termux (Android) and mobile Linux, powered by
+**Sovereign Core** — your own locally-hosted Qwen2.5-32B-AWQ model running
+on TatorTot. No cloud APIs. No API keys. No data leaving your network.
 
-The assistant can brainstorm, draft, design, edit, create, build, and deploy — all from within your Termux terminal.
+## Architecture
+
+```
+Termux (LOQ Laptop / Android Phone)
+        │
+        │  OpenAI-compatible REST  (LAN or localhost)
+        ▼
+TatorTot  ←→  vLLM serving Qwen2.5-32B-AWQ @ :8001
+        │
+        └── Sovereign Core (HyperAgents, VAGEN, …)
+```
+
+**Backends (in priority order):**
+| Backend    | Model                   | Where it runs          |
+|------------|-------------------------|------------------------|
+| `sovereign`| Qwen2.5-32B-AWQ         | TatorTot / localhost   |
+| `ollama`   | tinyllama (or any model)| On-device (offline)    |
+
+Zero cloud SDK dependencies — the `sovereign` backend uses stdlib `urllib`
+against the same OpenAI-compatible endpoint that HyperAgents uses.
 
 ---
 
-## Why Python instead of Node.js?
+## Quick Start
 
-Python is a more memory-efficient choice for resource-constrained mobile devices:
+```bash
+git clone https://github.com/leerobber/Termux-Intelligent-Assistant.git
+cd Termux-Intelligent-Assistant
+bash setup.sh
+```
 
-| Runtime | Idle RSS | Notes |
-|---------|----------|-------|
-| Node.js | ~50–80 MB | V8 JIT, large heap |
-| Python  | ~8–15 MB | Lightweight interpreter |
-| Shell   | ~1–3 MB  | Best for glue scripts |
+### Point at TatorTot
 
-This project's **Ollama (local) path uses Python + stdlib only** — zero required third-party packages for on-device inference.
-Cloud provider backends (OpenAI, Anthropic, Mistral, Llama via Groq) require their respective SDK packages, which `setup.sh` installs automatically.
+```bash
+python -m assistant.main config set sovereign_url http://192.168.x.x:8001
+python -m assistant.main status   # verify connection
+python -m assistant.main          # start chat
+```
+
+### Use on-device Ollama (offline fallback)
+
+```bash
+pkg install ollama
+ollama serve &
+ollama pull tinyllama
+python -m assistant.main config set backend ollama
+```
+
+---
+
+## Usage
+
+```
+python -m assistant.main                    # interactive chat (streaming)
+python -m assistant.main status             # check backend connectivity
+python -m assistant.main config show        # show all settings
+python -m assistant.main config set KEY VAL # update a setting
+python -m assistant.main history show       # view conversation history
+python -m assistant.main history clear      # clear conversation history
+```
+
+### Key Settings
+
+| Key               | Default                       | Description                           |
+|-------------------|-------------------------------|---------------------------------------|
+| `backend`         | `sovereign`                   | Active backend (`sovereign`/`ollama`) |
+| `sovereign_url`   | `http://localhost:8001`       | Sovereign Core endpoint               |
+| `sovereign_model` | `openai/qwen2.5-32b-awq`      | Model identifier                      |
+| `ollama_url`      | `http://localhost:11434`      | Ollama endpoint                       |
+| `ollama_model`    | `tinyllama`                   | Ollama model name                     |
+| `stream`          | `true`                        | Stream tokens as they arrive          |
+| `auto_run_bash`   | `false`                       | Auto-execute AI-suggested commands    |
+| `max_history`     | `20`                          | Messages kept in rolling SQLite log   |
+| `timeout`         | `60`                          | Request timeout (seconds)             |
 
 ---
 
 ## Features
 
-- **Local LLM via Ollama** — runs 100% on-device, no cloud required
-- **Cloud providers** — OpenAI, **Anthropic Claude**, **Mistral AI**, and **Llama via Groq** (free tier available)
-- **Relative paths everywhere** — no hardcoded `/data/data/...` or `/home/...` paths
-- **SQLite conversation memory** — tiny footprint, survives restarts
-- **Streaming responses** — low peak RAM usage
-- **Shell tool** — ask the assistant to run Termux commands for you
-
----
-
-## Quick Start (Termux)
-
-```bash
-# 1. Clone the repo
-git clone https://github.com/leerobber/Termux-Intelligent-Assistant
-cd Termux-Intelligent-Assistant
-
-# 2. Run the one-shot setup (installs Python, Ollama, pulls tinyllama)
-bash setup.sh
-
-# 3. Start chatting
-python -m assistant.main
-```
+- **Sovereign-first** — Qwen2.5-32B-AWQ via local OpenAI-compatible API
+- **Streaming output** — tokens printed as they arrive, minimal RAM usage
+- **Agentic bash** — AI-suggested commands shown with run prompt (or auto-run)
+- **Persistent memory** — SQLite rolling conversation window
+- **System context** — device info (CPU, RAM, storage, Termux paths) injected into every prompt
+- **Status check** — `python -m assistant.main status` verifies backend reachability
+- **Zero cloud deps** — stdlib urllib only; `requirements.txt` has no mandatory packages
+- **Config CLI** — set any option from the terminal, persisted to `config/settings.json`
 
 ---
 
 ## Project Structure
 
 ```
-Termux-Intelligent-Assistant/
-├── assistant/
-│   ├── main.py              # Entry point & CLI
-│   ├── core/
-│   │   ├── agent.py         # AI agent (Ollama / OpenAI / Anthropic / Mistral / Groq backends)
-│   │   ├── config.py        # Settings loader (relative paths)
-│   │   └── memory.py        # SQLite conversation history
-│   ├── tools/
-│   │   ├── shell.py         # Safe shell command execution
-│   │   └── file_ops.py      # Relative-path file helpers
-│   └── utils/
-│       └── paths.py         # All path constants — no hardcoded paths
-├── config/
-│   └── settings.json        # User-editable settings
-├── tests/                   # pytest test suite
-├── requirements.txt         # Optional dependencies (stdlib works without them)
-└── setup.sh                 # Termux one-shot setup script
-```
-
-All paths inside the codebase are **relative to the project root** (computed via `pathlib` at runtime). There are no hardcoded absolute paths.
-
----
-
-## Configuration
-
-```bash
-# Show current settings
-python -m assistant.main config show
-
-# Switch to OpenAI backend
-python -m assistant.main config set backend openai
-python -m assistant.main config set openai_api_key sk-...
-
-# Use a different Ollama model
-python -m assistant.main config set ollama_model phi3
-
-# Reduce history length to save RAM
-python -m assistant.main config set max_history 10
-```
-
-### Available settings (`config/settings.json`)
-
-| Key | Default | Description |
-|-----|---------|-------------|
-| `backend` | `"ollama"` | `"ollama"`, `"openai"`, `"anthropic"`, `"mistral"`, or `"llama"` |
-| `ollama_model` | `"tinyllama"` | Local model name |
-| `ollama_url` | `"http://localhost:11434"` | Ollama server URL |
-| `openai_model` | `"gpt-4o-mini"` | OpenAI model name |
-| `openai_api_key` | `""` | Your OpenAI API key |
-| `anthropic_model` | `"claude-3-5-sonnet-20241022"` | Anthropic Claude model name |
-| `anthropic_api_key` | `""` | Your Anthropic API key |
-| `anthropic_max_tokens` | `4096` | Max tokens per Anthropic response |
-| `mistral_model` | `"mistral-small-latest"` | Mistral AI model name |
-| `mistral_api_key` | `""` | Your Mistral AI API key |
-| `groq_model` | `"llama-3.3-70b-versatile"` | Llama model served by Groq |
-| `groq_api_key` | `""` | Your Groq API key (for Llama models) |
-| `max_history` | `20` | Max messages kept in memory |
-| `stream` | `true` | Stream tokens for lower peak RAM |
-
-### Provider model reference
-
-| Provider | `backend` | Example model values |
-|----------|-----------|----------------------|
-| Ollama (local) | `ollama` | `tinyllama`, `phi3`, `llama3` |
-| OpenAI | `openai` | `gpt-4o`, `gpt-4o-mini`, `gpt-3.5-turbo` |
-| Anthropic | `anthropic` | `claude-3-5-sonnet-20241022`, `claude-3-haiku-20240307` |
-| Mistral AI | `mistral` | `mistral-small-latest`, `mistral-large-latest` |
-| Llama (Groq) | `llama` | `llama-3.3-70b-versatile`, `llama3-8b-8192` |
-
----
-
-## Conversation History
-
-```bash
-# Show history
-python -m assistant.main history
-
-# Clear history
-python -m assistant.main history clear
+assistant/
+├── core/
+│   ├── agent.py          # sovereign + ollama backends, streaming
+│   ├── config.py         # settings loader with type coercion
+│   └── memory.py         # SQLite rolling conversation history
+├── main.py               # CLI entry point, interactive loop
+├── tools/
+│   ├── file_ops.py       # file read/write operations
+│   ├── shell.py          # shell command execution
+│   └── system_info.py    # device/Termux context for system prompt
+└── utils/
+    └── paths.py          # project-relative path resolution
+config/settings.json      # runtime configuration (gitignored in practice)
+requirements.txt          # optional dependencies only
+setup.sh                  # one-shot Termux setup
 ```
 
 ---
 
-## Running Tests
+## Part of Sovereign Core
 
-```bash
-# In Termux
-pip install pytest
-python -m pytest tests/ -v
-```
+This assistant is the mobile/Termux interface to the Sovereign Core ecosystem.
 
----
-
-## Memory-Saving Tips
-
-1. **Use `tinyllama`** (default) — fits in 700 MB RAM
-2. **Keep `max_history` low** (10 or less) on devices with < 4 GB RAM
-3. **Enable streaming** (`"stream": true`) to avoid buffering large responses
-4. **Use Ollama's `--num-ctx` flag** to reduce context window if needed:
-   ```bash
-   OLLAMA_NUM_CTX=512 ollama serve
-   ```
-
----
-
-## Efficient Termux Backend Alternatives to Node.js
-
-| Option | Memory | Install | Best for |
-|--------|--------|---------|----------|
-| **Python** (this project) | ~10 MB | `pkg install python` | General scripting + AI |
-| **Bash/sh** | ~2 MB | Pre-installed | Glue scripts, automation |
-| **Lua** | ~1 MB | `pkg install lua54` | Embedded scripting |
-| **Go** (compiled) | ~5 MB | `pkg install golang` | Performance-critical services |
-| **Rust** (compiled) | ~3 MB | `pkg install rust` | Systems programming |
+| Repo | Role |
+|------|------|
+| [sovereign-core](https://github.com/leerobber/sovereign-core) | Project tracking, issues, roadmap |
+| [HyperAgents](https://github.com/leerobber/HyperAgents) | Self-evolving agent loop (rewired to Qwen2.5) |
+| [VAGEN](https://github.com/leerobber/VAGEN) | Vision-language agent training |
+| **Termux-Intelligent-Assistant** | Mobile terminal interface → Sovereign Core |
 
 ---
 
 ## License
 
-See [LICENSE](LICENSE).
-
+MIT — see [LICENSE](LICENSE)

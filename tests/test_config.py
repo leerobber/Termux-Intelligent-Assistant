@@ -1,165 +1,151 @@
-"""Tests for the configuration loader."""
+"""Tests for assistant.core.config — Sovereign Core edition."""
 import json
-import sys
-from pathlib import Path
-from unittest import mock
+import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-
-import assistant.core.config as cfg_mod  # noqa: E402  (after sys.path patch)
-
-
-def test_load_returns_defaults_when_no_file(tmp_path):
-    """load() must return defaults when config file is absent."""
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", tmp_path / "missing.json"), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
-
-    assert settings["backend"] == "ollama"
-    assert settings["max_history"] == 20
-
-
-def test_load_merges_user_overrides(tmp_path):
-    """User values in settings.json override the defaults."""
-    settings_file = tmp_path / "settings.json"
-    settings_file.write_text(json.dumps({"backend": "openai", "max_history": 5}))
-
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
-
-    assert settings["backend"] == "openai"
-    assert settings["max_history"] == 5
-    # Default for unset keys should still be present
-    assert "ollama_model" in settings
-
-
-def test_anthropic_defaults_present(tmp_path):
-    """anthropic_model, anthropic_api_key, and anthropic_max_tokens must exist in defaults."""
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", tmp_path / "missing.json"), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
-
-    assert "anthropic_model" in settings
-    assert settings["anthropic_model"] == "claude-3-5-sonnet-20241022"
-    assert "anthropic_api_key" in settings
-    assert settings["anthropic_api_key"] == ""
-    assert "anthropic_max_tokens" in settings
-    assert settings["anthropic_max_tokens"] == 4096
-
-
-def test_anthropic_defaults_survive_merge(tmp_path):
-    """anthropic_* defaults are still present when user overrides other keys."""
-    settings_file = tmp_path / "settings.json"
-    settings_file.write_text(json.dumps({"backend": "anthropic"}))
-
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
-
-    assert settings["anthropic_model"] == "claude-3-5-sonnet-20241022"
-    assert "anthropic_api_key" in settings
-    assert "anthropic_max_tokens" in settings
-
-
-def test_save_roundtrip(tmp_path):
-    """save() + load() round-trip preserves values."""
-    settings_file = tmp_path / "settings.json"
-    data = {"backend": "openai", "max_history": 10}
-
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        cfg_mod.save(data)
-        loaded = json.loads(settings_file.read_text())
-
-    assert loaded["backend"] == "openai"
-    assert loaded["max_history"] == 10
+from assistant.core.config import DEFAULTS, _normalize, load, save
 
 
 # ---------------------------------------------------------------------------
-# _normalize tests
+# _normalize
 # ---------------------------------------------------------------------------
 
-def test_normalize_string_to_int():
-    """_normalize converts a string to int when default is int."""
-    assert cfg_mod._normalize("5", 20) == 5
-    assert isinstance(cfg_mod._normalize("5", 20), int)
+class TestNormalize:
+    def test_bool_from_string_true(self):
+        assert _normalize("true", True) is True
+        assert _normalize("True", True) is True
+        assert _normalize("1", True) is True
+        assert _normalize("yes", True) is True
 
+    def test_bool_from_string_false(self):
+        assert _normalize("false", False) is False
+        assert _normalize("False", False) is False
+        assert _normalize("0", False) is False
+        assert _normalize("no", False) is False
 
-def test_normalize_string_bool_true():
-    """_normalize converts truthy string to True when default is bool."""
-    for raw in ("true", "True", "1", "yes"):
-        assert cfg_mod._normalize(raw, True) is True
+    def test_bool_from_int(self):
+        assert _normalize(1, True) is True
+        assert _normalize(0, False) is False
 
+    def test_bool_passthrough(self):
+        assert _normalize(True, True) is True
+        assert _normalize(False, False) is False
 
-def test_normalize_string_bool_false():
-    """_normalize converts falsy string to False when default is bool."""
-    for raw in ("false", "False", "0", "no"):
-        assert cfg_mod._normalize(raw, True) is False
+    def test_int_from_string(self):
+        assert _normalize("42", 0) == 42
+        assert isinstance(_normalize("42", 0), int)
 
+    def test_int_bad_string_passthrough(self):
+        result = _normalize("not_a_number", 0)
+        assert result == "not_a_number"
 
-def test_normalize_bool_unchanged():
-    """_normalize leaves a correctly-typed bool unchanged."""
-    assert cfg_mod._normalize(False, True) is False
-    assert cfg_mod._normalize(True, True) is True
+    def test_float_from_string(self):
+        result = _normalize("3.14", 1.0)
+        assert abs(result - 3.14) < 1e-9
 
+    def test_str_passthrough(self):
+        assert _normalize("sovereign", "ollama") == "sovereign"
 
-def test_normalize_int_for_bool_default():
-    """_normalize coerces 0/1 integer to bool when default is bool."""
-    assert cfg_mod._normalize(0, True) is False
-    assert cfg_mod._normalize(1, True) is True
-
-
-def test_normalize_invalid_string_for_int_returns_unchanged():
-    """_normalize returns original value when string cannot be coerced to int."""
-    result = cfg_mod._normalize("notanumber", 20)
-    assert result == "notanumber"
-
-
-def test_normalize_correct_type_unchanged():
-    """_normalize returns value as-is when it already matches default type."""
-    assert cfg_mod._normalize(42, 20) == 42
-    assert cfg_mod._normalize("openai", "ollama") == "openai"
+    def test_unknown_type_passthrough(self):
+        assert _normalize([1, 2], []) == [1, 2]
 
 
 # ---------------------------------------------------------------------------
-# load() normalization tests
+# DEFAULTS content
 # ---------------------------------------------------------------------------
 
-def test_load_normalizes_string_int(tmp_path):
-    """load() coerces string-typed int values from legacy config files."""
-    settings_file = tmp_path / "settings.json"
-    # Simulate legacy config with max_history stored as string
-    settings_file.write_text(json.dumps({"max_history": "7"}))
+class TestDefaults:
+    def test_sovereign_backend_is_default(self):
+        assert DEFAULTS["backend"] == "sovereign"
 
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
+    def test_sovereign_keys_present(self):
+        assert "sovereign_url" in DEFAULTS
+        assert "sovereign_model" in DEFAULTS
 
-    assert settings["max_history"] == 7
-    assert isinstance(settings["max_history"], int)
+    def test_ollama_keys_present(self):
+        assert "ollama_url" in DEFAULTS
+        assert "ollama_model" in DEFAULTS
+
+    def test_no_cloud_api_keys(self):
+        """Cloud API keys must NOT exist in Sovereign Core edition."""
+        cloud_keys = {
+            "openai_api_key", "anthropic_api_key", "anthropic_model",
+            "mistral_api_key", "mistral_model", "groq_api_key", "groq_model",
+        }
+        for key in cloud_keys:
+            assert key not in DEFAULTS, f"Cloud key '{key}' should not be in DEFAULTS"
+
+    def test_auto_run_bash_default_false(self):
+        assert DEFAULTS["auto_run_bash"] is False
+
+    def test_stream_default_true(self):
+        assert DEFAULTS["stream"] is True
+
+    def test_timeout_present(self):
+        assert "timeout" in DEFAULTS
+        assert isinstance(DEFAULTS["timeout"], int)
 
 
-def test_load_normalizes_string_bool(tmp_path):
-    """load() coerces string-typed bool values from legacy config files."""
-    settings_file = tmp_path / "settings.json"
-    settings_file.write_text(json.dumps({"stream": "false"}))
+# ---------------------------------------------------------------------------
+# load / save round-trip
+# ---------------------------------------------------------------------------
 
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
+class TestLoadSave:
+    def test_load_returns_defaults_when_no_file(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        monkeypatch.setattr(paths, "CONFIG_FILE", tmp_path / "settings.json")
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        cfg = load()
+        assert cfg["backend"] == DEFAULTS["backend"]
 
-    assert settings["stream"] is False
+    def test_load_merges_user_settings(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        cfg_file = tmp_path / "settings.json"
+        cfg_file.write_text(json.dumps({"backend": "ollama", "max_history": 5}))
+        monkeypatch.setattr(paths, "CONFIG_FILE", cfg_file)
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        cfg = load()
+        assert cfg["backend"] == "ollama"
+        assert cfg["max_history"] == 5
+        # All other defaults still present
+        assert "sovereign_url" in cfg
 
+    def test_save_and_load_round_trip(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        cfg_file = tmp_path / "settings.json"
+        monkeypatch.setattr(paths, "CONFIG_FILE", cfg_file)
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        settings = load()
+        settings["sovereign_url"] = "http://192.168.1.100:8001"
+        save(settings)
+        reloaded = load()
+        assert reloaded["sovereign_url"] == "http://192.168.1.100:8001"
 
-def test_load_normalizes_string_anthropic_max_tokens(tmp_path):
-    """load() coerces string anthropic_max_tokens to int."""
-    settings_file = tmp_path / "settings.json"
-    settings_file.write_text(json.dumps({"anthropic_max_tokens": "1024"}))
+    def test_load_normalizes_string_bool(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        cfg_file = tmp_path / "settings.json"
+        cfg_file.write_text(json.dumps({"stream": "true", "auto_run_bash": "false"}))
+        monkeypatch.setattr(paths, "CONFIG_FILE", cfg_file)
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        cfg = load()
+        assert cfg["stream"] is True
+        assert cfg["auto_run_bash"] is False
 
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
-        settings = cfg_mod.load()
+    def test_load_normalizes_string_int(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        cfg_file = tmp_path / "settings.json"
+        cfg_file.write_text(json.dumps({"max_history": "10", "timeout": "30"}))
+        monkeypatch.setattr(paths, "CONFIG_FILE", cfg_file)
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        cfg = load()
+        assert cfg["max_history"] == 10
+        assert isinstance(cfg["max_history"], int)
+        assert cfg["timeout"] == 30
 
-    assert settings["anthropic_max_tokens"] == 1024
-    assert isinstance(settings["anthropic_max_tokens"], int)
+    def test_load_handles_corrupt_json(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        cfg_file = tmp_path / "settings.json"
+        cfg_file.write_text("{not valid json}")
+        monkeypatch.setattr(paths, "CONFIG_FILE", cfg_file)
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        cfg = load()
+        assert cfg["backend"] == DEFAULTS["backend"]
