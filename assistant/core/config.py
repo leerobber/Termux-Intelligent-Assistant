@@ -11,7 +11,7 @@ Backends (priority order):
 import json
 from typing import Any
 
-from assistant.utils.paths import CONFIG_FILE, ensure_data_dir
+from assistant.utils import paths as _paths
 
 
 def _normalize(value: Any, default: Any) -> Any:
@@ -62,6 +62,7 @@ _DEFAULTS: dict[str, Any] = {
 
     # ── Behaviour ────────────────────────────────────────────────────────────
     "max_history": 20,        # messages kept in SQLite rolling window
+    "max_tokens": 2048,       # maximum tokens per response (int required by backends)
     "stream": True,           # stream tokens as they arrive
     "auto_run_bash": False,   # auto-execute AI-suggested bash without prompt
     "timeout": 60,            # HTTP request timeout (seconds)
@@ -74,10 +75,10 @@ DEFAULTS: dict[str, Any] = _DEFAULTS
 
 def load() -> dict[str, Any]:
     """Load settings, merging with defaults."""
-    ensure_data_dir()
-    if CONFIG_FILE.exists():
+    _paths.ensure_data_dir()
+    if _paths.CONFIG_FILE.exists():
         try:
-            with CONFIG_FILE.open() as fh:
+            with _paths.CONFIG_FILE.open() as fh:
                 user = json.load(fh)
             merged = {**_DEFAULTS, **user}
             for key, default in _DEFAULTS.items():
@@ -90,6 +91,6 @@ def load() -> dict[str, Any]:
 
 def save(settings: dict[str, Any]) -> None:
     """Persist *settings* to config/settings.json."""
-    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with CONFIG_FILE.open("w") as fh:
+    _paths.CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with _paths.CONFIG_FILE.open("w") as fh:
         json.dump(settings, fh, indent=2)

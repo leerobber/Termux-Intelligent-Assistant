@@ -84,6 +84,11 @@ class TestDefaults:
         assert "timeout" in DEFAULTS
         assert isinstance(DEFAULTS["timeout"], int)
 
+    def test_max_tokens_present_and_int(self):
+        assert "max_tokens" in DEFAULTS
+        assert isinstance(DEFAULTS["max_tokens"], int)
+        assert DEFAULTS["max_tokens"] > 0
+
 
 # ---------------------------------------------------------------------------
 # load / save round-trip
@@ -140,6 +145,16 @@ class TestLoadSave:
         assert cfg["max_history"] == 10
         assert isinstance(cfg["max_history"], int)
         assert cfg["timeout"] == 30
+
+    def test_load_normalizes_max_tokens_string(self, tmp_path, monkeypatch):
+        import assistant.utils.paths as paths
+        cfg_file = tmp_path / "settings.json"
+        cfg_file.write_text(json.dumps({"max_tokens": "1024"}))
+        monkeypatch.setattr(paths, "CONFIG_FILE", cfg_file)
+        monkeypatch.setattr(paths, "HISTORY_FILE", tmp_path / "history.db")
+        cfg = load()
+        assert cfg["max_tokens"] == 1024
+        assert isinstance(cfg["max_tokens"], int)
 
     def test_load_handles_corrupt_json(self, tmp_path, monkeypatch):
         import assistant.utils.paths as paths
