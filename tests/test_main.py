@@ -62,6 +62,17 @@ def test_coerce_int_key():
     assert isinstance(_coerce_value("max_history", "5"), int)
 
 
+def test_coerce_max_tokens_as_int():
+    result = _coerce_value("max_tokens", "1024")
+    assert result == 1024
+    assert isinstance(result, int)
+
+
+def test_coerce_max_tokens_invalid_raises():
+    with pytest.raises(ValueError, match="integer"):
+        _coerce_value("max_tokens", "bad")
+
+
 def test_coerce_int_invalid_raises():
     with pytest.raises(ValueError, match="integer"):
         _coerce_value("max_history", "abc")
@@ -111,10 +122,10 @@ def test_coerce_unknown_key_plain_string():
 
 def test_cmd_config_set_int(tmp_path, capsys):
     settings_file = tmp_path / "settings.json"
-    import assistant.core.config as cfg_mod
+    import assistant.utils.paths as paths_mod
 
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
+    with mock.patch.object(paths_mod, "CONFIG_FILE", settings_file), \
+         mock.patch.object(paths_mod, "ensure_data_dir"):
         _cmd_config(["set", "max_history", "7"])
 
     saved = json.loads(settings_file.read_text())
@@ -126,10 +137,10 @@ def test_cmd_config_set_int(tmp_path, capsys):
 
 def test_cmd_config_set_bool(tmp_path, capsys):
     settings_file = tmp_path / "settings.json"
-    import assistant.core.config as cfg_mod
+    import assistant.utils.paths as paths_mod
 
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", settings_file), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
+    with mock.patch.object(paths_mod, "CONFIG_FILE", settings_file), \
+         mock.patch.object(paths_mod, "ensure_data_dir"):
         _cmd_config(["set", "stream", "false"])
 
     saved = json.loads(settings_file.read_text())
@@ -139,10 +150,10 @@ def test_cmd_config_set_bool(tmp_path, capsys):
 
 
 def test_cmd_config_set_invalid_int_prints_error(tmp_path, capsys):
-    import assistant.core.config as cfg_mod
+    import assistant.utils.paths as paths_mod
 
-    with mock.patch.object(cfg_mod, "CONFIG_FILE", tmp_path / "s.json"), \
-         mock.patch.object(cfg_mod, "ensure_data_dir"):
+    with mock.patch.object(paths_mod, "CONFIG_FILE", tmp_path / "s.json"), \
+         mock.patch.object(paths_mod, "ensure_data_dir"):
         _cmd_config(["set", "max_history", "notanumber"])
 
     captured = capsys.readouterr()

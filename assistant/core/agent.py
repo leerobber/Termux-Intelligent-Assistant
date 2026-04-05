@@ -18,7 +18,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Iterator
 
-from assistant.core.config import load as load_config
+from assistant.core.config import DEFAULTS, load as load_config
 from assistant.core.memory import Memory
 from assistant.tools.system_info import get_context
 
@@ -124,6 +124,20 @@ class Agent:
     def _build_messages(self) -> list[dict[str, str]]:
         return [{"role": "system", "content": self._system_prompt}] + self._memory.recent()
 
+    # ---------- Internal helpers --------------------------------------
+
+    def _get_max_tokens(self) -> int:
+        """Return max_tokens from config as an int.
+
+        Raises ValueError if the stored value cannot be coerced to int.
+        """
+        try:
+            return int(self._cfg.get("max_tokens", DEFAULTS["max_tokens"]))
+        except (ValueError, TypeError) as exc:
+            raise ValueError(
+                f"Configuration error: 'max_tokens' must be an integer — {exc}"
+            ) from exc
+
     # ---------- Sovereign backend (OpenAI-compatible) -----------------
 
     def _sovereign(self, messages: list[dict[str, str]]) -> str:
@@ -133,10 +147,16 @@ class Agent:
     def _sovereign_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
         """Stream tokens from the Sovereign Core endpoint (SSE)."""
         url = self._cfg["sovereign_url"].rstrip("/") + "/v1/chat/completions"
+        try:
+            max_tokens = self._get_max_tokens()
+        except ValueError as exc:
+            yield f"\n[{exc}]\n"
+            return
         payload = json.dumps({
             "model": self._cfg["sovereign_model"],
             "messages": messages,
             "stream": True,
+            "max_tokens": max_tokens,
         }).encode()
 
         req = urllib.request.Request(
@@ -187,10 +207,16 @@ class Agent:
     def _ollama_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
         """Stream tokens from the local Ollama endpoint."""
         url = self._cfg["ollama_url"].rstrip("/") + "/api/chat"
+        try:
+            max_tokens = self._get_max_tokens()
+        except ValueError as exc:
+            yield f"\n[{exc}]\n"
+            return
         payload = json.dumps({
             "model": self._cfg["ollama_model"],
             "messages": messages,
             "stream": True,
+            "options": {"num_predict": max_tokens},
         }).encode()
 
         req = urllib.request.Request(
