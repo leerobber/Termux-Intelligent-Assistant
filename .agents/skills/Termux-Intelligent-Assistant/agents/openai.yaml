@@ -1,0 +1,6 @@
+interface:
+  display_name: "Termux Intelligent Assistant"
+  short_description: "Repo-specific patterns and workflows for Termux-Intelligent-Assistant"
+  default_prompt: "Use the Termux-Intelligent-Assistant repo skill to follow existing architecture, testing, and workflow conventions."
+policy:
+  allow_implicit_invocation: true
