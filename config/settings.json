@@ -1,3 +1,12 @@
 {
-  "backend": "sovereign"
+  "backend": "sovereign",
+  "sovereign_url": "http://192.168.1.100:8001",
+  "sovereign_model": "openai/qwen2.5-32b-awq",
+  "ollama_url": "http://localhost:11434",
+  "ollama_model": "tinyllama",
+  "max_history": 20,
+  "stream": true,
+  "auto_run_bash": false,
+  "timeout": 60,
+  "log_level": "WARNING"
 }
