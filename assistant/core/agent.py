@@ -1,14 +1,12 @@
 """
-AI agent core — Sovereign Core edition.
+assistant/core/agent.py — Intelligent Agent (Sovereign Core edition)
+====================================================================
+Backend priority:
+  1. Sovereign Core Gateway  — full cluster routing (RTX 5050 → Radeon 780M → Ryzen 7)
+  2. Direct Ollama (LAN)     — if gateway unreachable, try ollama directly
+  3. CPU Ryzen fallback       — direct REST on :8003
 
-Backends (in priority order):
-  sovereign : Qwen2.5-32B-AWQ via OpenAI-compatible REST API
-              (no API key, no cloud, full control — served by vLLM/litellm
-               on TatorTot or localhost at port 8001)
-  ollama    : local LLM via Ollama HTTP API (on-device, offline fallback)
-
-Both backends support streaming to minimise peak RAM usage on mobile.
-Zero third-party dependencies — uses only Python stdlib (urllib, json).
+Zero third-party deps — pure Python stdlib (urllib, json, sqlite3).
 """
 from __future__ import annotations
 
@@ -16,241 +14,120 @@ import json
 import logging
 import urllib.error
 import urllib.request
-from typing import Any, Iterator
+from typing import Iterator
 
 from assistant.core.config import DEFAULTS, load as load_config
 from assistant.core.memory import Memory
+from assistant.core.sovereign_client import infer, status as sovereign_status
 from assistant.tools.system_info import get_context
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_PROMPT = (
-    "You are an intelligent assistant specialized in Termux and mobile Linux. "
-    "Give concise, accurate answers. When suggesting shell commands, wrap them "
-    "in ```bash ... ``` fences.\n\n"
-    "{context}"
+    "You are an intelligent assistant specialized in Termux and mobile Linux environments. "
+    "Give concise, accurate answers. When suggesting shell commands, wrap them in "
+    "```bash ... ``` fences. If asked about Sovereign Core status, use the tools available.\n\n"
+    "System context:\n{context}"
 )
 
 
 class Agent:
-    """Stateful conversational agent with Sovereign Core and Ollama backends."""
+    """
+    Stateful conversational agent with Sovereign Core routing.
+    
+    Maintains conversation history in SQLite, builds full message context
+    on each turn, and routes through the Sovereign Core gateway with
+    automatic fallback to direct Ollama backends.
+    """
 
     def __init__(self) -> None:
         self._cfg = load_config()
-        self._memory = Memory(max_history=self._cfg["max_history"])
-        self._backend: str = self._cfg["backend"]
-        self._system_prompt = _SYSTEM_PROMPT.format(context=get_context())
+        self._memory = Memory(max_history=self._cfg.get("max_history", 20))
+        self._system = _SYSTEM_PROMPT.format(context=get_context())
+        self._request_count = 0
 
-    # ------------------------------------------------------------------
+    # ── Public API ────────────────────────────────────────────────────────────
+
     def chat(self, user_input: str) -> str:
-        """Send *user_input*, stream the reply, store both in memory."""
+        """Send user_input, get response, store both in memory."""
         self._memory.add("user", user_input)
-        messages = self._build_messages()
+        self._request_count += 1
 
-        if self._backend == "sovereign":
-            reply = self._sovereign(messages)
-        elif self._backend == "ollama":
-            reply = self._ollama(messages)
-        else:
-            reply = (
-                f"Unknown backend '{self._backend}'. "
-                "Set backend to 'sovereign' or 'ollama'.\n"
-                "Run: python -m assistant.main config set backend sovereign"
-            )
+        try:
+            reply = self._route(user_input)
+        except Exception as exc:
+            reply = f"[Error] {exc}\n\nTry: python -m assistant.main status"
+            logger.error("Chat error: %s", exc)
 
         self._memory.add("assistant", reply)
         return reply
 
-    def chat_stream(self, user_input: str) -> Iterator[str]:
-        """Stream tokens from *user_input*; yields each token as it arrives.
+    def status(self) -> dict:
+        """Return current backend connectivity status."""
+        return sovereign_status()
 
-        Stores the full assembled reply in memory on completion.
-        """
-        self._memory.add("user", user_input)
-        messages = self._build_messages()
-        chunks: list[str] = []
-
-        if self._backend == "sovereign":
-            gen = self._sovereign_stream(messages)
-        elif self._backend == "ollama":
-            gen = self._ollama_stream(messages)
-        else:
-            error_msg = (
-                f"Unknown backend '{self._backend}'. "
-                "Set backend to 'sovereign' or 'ollama'."
-            )
-            yield error_msg
-            self._memory.add("assistant", error_msg)
-            return
-
-        for token in gen:
-            chunks.append(token)
-            yield token
-
-        full_reply = "".join(chunks)
-        self._memory.add("assistant", full_reply)
-
-    def clear_history(self) -> None:
+    def reset(self) -> None:
+        """Clear conversation history."""
         self._memory.clear()
 
-    def close(self) -> None:
-        self._memory.close()
+    @property
+    def request_count(self) -> int:
+        return self._request_count
 
-    def status(self) -> dict[str, Any]:
-        """Return a brief health-check dict for the configured backend."""
-        result: dict[str, Any] = {
-            "backend": self._backend,
-            "reachable": False,
-            "model": None,
-        }
-        try:
-            if self._backend == "sovereign":
-                url = self._cfg["sovereign_url"].rstrip("/") + "/v1/models"
-                result["model"] = self._cfg["sovereign_model"]
-            else:
-                url = self._cfg["ollama_url"].rstrip("/") + "/api/tags"
-                result["model"] = self._cfg["ollama_model"]
-            req = urllib.request.Request(url, method="GET")
-            with urllib.request.urlopen(req, timeout=5):
-                result["reachable"] = True
-        except Exception:
-            pass
-        return result
+    # ── Routing ───────────────────────────────────────────────────────────────
 
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
+    def _route(self, user_input: str) -> str:
+        """Route to Sovereign Core gateway → direct Ollama fallback."""
+        history = self._memory.recent()
+        # Build full prompt including history
+        full_prompt = self._build_prompt(history, user_input)
 
-    def _build_messages(self) -> list[dict[str, str]]:
-        return [{"role": "system", "content": self._system_prompt}] + self._memory.recent()
-
-    # ---------- Internal helpers --------------------------------------
-
-    def _get_max_tokens(self) -> int:
-        """Return max_tokens from config as an int.
-
-        Raises ValueError if the stored value cannot be coerced to int.
-        """
-        try:
-            return int(self._cfg.get("max_tokens", DEFAULTS["max_tokens"]))
-        except (ValueError, TypeError) as exc:
-            raise ValueError(
-                f"Configuration error: 'max_tokens' must be an integer — {exc}"
-            ) from exc
-
-    # ---------- Sovereign backend (OpenAI-compatible) -----------------
-
-    def _sovereign(self, messages: list[dict[str, str]]) -> str:
-        """Non-streaming sovereign request (collects full reply)."""
-        return "".join(self._sovereign_stream(messages))
-
-    def _sovereign_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
-        """Stream tokens from the Sovereign Core endpoint (SSE)."""
-        url = self._cfg["sovereign_url"].rstrip("/") + "/v1/chat/completions"
-        try:
-            max_tokens = self._get_max_tokens()
-        except ValueError as exc:
-            yield f"\n[{exc}]\n"
-            return
-        payload = json.dumps({
-            "model": self._cfg["sovereign_model"],
-            "messages": messages,
-            "stream": True,
-            "max_tokens": max_tokens,
-        }).encode()
-
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        result = infer(
+            prompt=full_prompt,
+            system=self._system,
+            model=self._cfg.get("model", "auto"),
+            max_tokens=self._cfg.get("max_tokens", 1024),
+            temperature=self._cfg.get("temperature", 0.7),
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self._cfg.get("timeout", 60)) as resp:
-                for raw_line in resp:
-                    line = raw_line.decode("utf-8", errors="replace").strip()
-                    if not line or not line.startswith("data:"):
-                        continue
-                    payload_str = line[len("data:"):].strip()
-                    if payload_str == "[DONE]":
-                        break
-                    try:
-                        data = json.loads(payload_str)
-                        token = (
-                            data.get("choices", [{}])[0]
-                            .get("delta", {})
-                            .get("content", "")
-                        )
-                        if token:
-                            yield token
-                    except json.JSONDecodeError:
-                        continue
-        except urllib.error.URLError as exc:
-            url_display = self._cfg["sovereign_url"]
-            yield (
-                f"\n[Sovereign Core not reachable: {exc.reason}]\n"
-                f"  Expected endpoint: {url_display}:8001\n"
-                "  On TatorTot, start vLLM with:\n"
-                "    vllm serve Qwen/Qwen2.5-32B-AWQ --port 8001\n"
-                "  Then set your endpoint:\n"
-                f"    python -m assistant.main config set sovereign_url http://<tatortot-ip>:8001\n"
-                "  Or fall back to on-device Ollama:\n"
-                "    python -m assistant.main config set backend ollama"
-            )
-
-    # ---------- Ollama backend ----------------------------------------
-
-    def _ollama(self, messages: list[dict[str, str]]) -> str:
-        """Non-streaming Ollama request (collects full reply)."""
-        return "".join(self._ollama_stream(messages))
-
-    def _ollama_stream(self, messages: list[dict[str, str]]) -> Iterator[str]:
-        """Stream tokens from the local Ollama endpoint."""
-        url = self._cfg["ollama_url"].rstrip("/") + "/api/chat"
-        try:
-            max_tokens = self._get_max_tokens()
-        except ValueError as exc:
-            yield f"\n[{exc}]\n"
-            return
-        payload = json.dumps({
-            "model": self._cfg["ollama_model"],
-            "messages": messages,
-            "stream": True,
-            "options": {"num_predict": max_tokens},
-        }).encode()
-
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        logger.debug(
+            "Routed via %s | latency=%.0fms | tokens=%d",
+            result.backend, result.latency_ms, result.tokens,
         )
-        try:
-            with urllib.request.urlopen(req, timeout=self._cfg.get("timeout", 60)) as resp:
-                for raw_line in resp:
-                    if not raw_line.strip():
-                        continue
-                    try:
-                        data = json.loads(raw_line)
-                        token = data.get("message", {}).get("content", "")
-                        if token:
-                            yield token
-                        if data.get("done"):
-                            break
-                    except json.JSONDecodeError:
-                        continue
-        except urllib.error.URLError as exc:
-            yield (
-                f"\n[Ollama not available: {exc.reason}]\n"
-                "  Start Ollama:  ollama serve\n"
-                f"  Pull a model:  ollama pull {self._cfg['ollama_model']}\n"
-                "  Or point at TatorTot:\n"
-                "    python -m assistant.main config set backend sovereign"
-            )
+        return result.text
 
-    # ------------------------------------------------------------------
-    def __enter__(self) -> "Agent":
-        return self
+    def _build_prompt(self, history: list[dict], current: str) -> str:
+        """Build a conversation-formatted prompt string for Ollama."""
+        lines = []
+        # Include last N-1 turns from history (current not yet in history)
+        for msg in history[:-1]:  # exclude the just-added current message
+            role = msg["role"].upper()
+            lines.append(f"[{role}]: {msg['content']}")
+        lines.append(f"[USER]: {current}")
+        lines.append("[ASSISTANT]:")
+        return "\n".join(lines)
 
-    def __exit__(self, *_: object) -> None:
-        self.close()
+
+# ── SAGE-aware agent (extended for sovereign tasks) ───────────────────────────
+
+class SovereignAgent(Agent):
+    """
+    Extended agent with direct access to KAIROS SAGE loop and ledger.
+    Used by `python -m assistant.main sovereign` subcommands.
+    """
+
+    def run_sage(self, task: str) -> dict:
+        """Submit a task to the SAGE 4-agent loop."""
+        from assistant.core.sovereign_client import run_sage_task
+        return run_sage_task(task)
+
+    def evolve(self, cycles: int = 1) -> dict:
+        """Trigger KAIROS evolution cycles."""
+        import json, urllib.request
+        from assistant.core.sovereign_client import GATEWAY_URL, _post
+        return _post(f"{GATEWAY_URL}/kairos/evolve", {"cycles": cycles}, timeout=120)
+
+    def ledger(self, n: int = 10) -> list:
+        """Fetch recent Aegis-Vault ledger entries."""
+        from assistant.core.sovereign_client import GATEWAY_URL, _get
+        data = _get(f"{GATEWAY_URL}/ledger/tail?n={n}")
+        return data.get("entries", [])
