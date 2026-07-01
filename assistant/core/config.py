@@ -50,11 +50,11 @@ _DEFAULTS: dict[str, Any] = {
     # "ollama"    → on-device Ollama (low RAM, offline)
     "backend": "sovereign",
 
-    # ── Sovereign Core (primary) ─────────────────────────────────────────────
-    # Point at TatorTot over LAN:  http://192.168.x.x:8001
-    # Or localhost when running on the same machine:  http://localhost:8001
-    "sovereign_url": "http://localhost:8001",
-    "sovereign_model": "openai/qwen2.5-32b-awq",
+    # ── GH05T3 Gateway / sovereign-core (primary) ───────────────────────────
+    # gateway_v3 runs on :8002. Override with GH05T3_GATEWAY_URL env var.
+    # Tailscale: http://100.94.227.81:8002
+    "sovereign_url": "http://localhost:8002",
+    "sovereign_model": "avery",
 
     # ── Ollama (fallback / on-device) ────────────────────────────────────────
     "ollama_url": "http://localhost:11434",

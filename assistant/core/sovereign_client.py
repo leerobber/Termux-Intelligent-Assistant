@@ -20,12 +20,14 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 # ── Configuration ──────────────────────────────────────────────────────────────
-
-GATEWAY_URL = "http://localhost:8000"
+# GH05T3 gateway_v3 runs on port 8002 (WiFi) or Tailscale (remote).
+# Override with env var GH05T3_GATEWAY_URL for Tailscale/LAN access:
+#   export GH05T3_GATEWAY_URL=http://100.94.227.81:8002
+import os as _os
+GATEWAY_URL = _os.environ.get("GH05T3_GATEWAY_URL", "http://localhost:8002")
 DIRECT_BACKENDS = [
-    ("nvidia", "http://localhost:8001"),
-    ("amd",    "http://localhost:8002"),
-    ("cpu",    "http://localhost:8003"),
+    ("avery",  GATEWAY_URL),          # GH05T3 gateway (primary)
+    ("ollama", "http://localhost:11434"),  # local Ollama (offline fallback)
 ]
 REQUEST_TIMEOUT = 30
 HEALTH_CACHE_TTL = 20.0
